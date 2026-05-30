@@ -45,7 +45,7 @@ services:
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -61,13 +61,7 @@ services:
     command: >
       bash -c "
         airflow db migrate &&
-        airflow users create
-          --username admin
-          --password admin
-          --firstname Admin
-          --lastname User
-          --role Admin
-          --email admin@example.com
+        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
       "
     restart: "no"
 
@@ -174,7 +168,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -197,7 +191,7 @@ services:
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
     ports:
-      - "5000:5000"
+      - "5001:5000"
     depends_on:
       postgres:
         condition: service_healthy

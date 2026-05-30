@@ -1,0 +1,31 @@
+# Data & warehouse
+data/
+*.db
+*.duckdb
+
+# Logs
+logs/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Docker volumes (managed by Docker, not git)
+postgres-data/
+minio-data/
+redpanda-data/
+redis-data/
+grafana-data/
+prometheus-data/
