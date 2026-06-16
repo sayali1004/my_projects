@@ -1,0 +1,91 @@
+-- models/marts/mart_earnings_surprise.sql
+-- ──────────────────────────────────────────
+-- Final mart table: everything joined together in one place.
+-- This is what the dashboard and RAG chatbot query directly.
+-- One row per filing with all signals, scores, and price reactions.
+
+WITH scores AS (
+    SELECT * FROM {{ source('raw', 'earnings_surprise_scores') }}
+),
+
+prices AS (
+    SELECT
+        ticker,
+        price_date,
+        close,
+        pct_change_1d,
+        pct_change_5d
+    FROM {{ source('raw', 'stock_prices') }}
+),
+
+-- Sector mapping (manually curated — extend as needed)
+sectors AS (
+    SELECT * FROM (VALUES
+        ('AAPL',  'Technology'),    ('MSFT',  'Technology'),
+        ('GOOGL', 'Technology'),    ('META',  'Technology'),
+        ('NVDA',  'Technology'),    ('AVGO',  'Technology'),
+        ('CSCO',  'Technology'),    ('ACN',   'Technology'),
+        ('AMZN',  'Consumer'),      ('TSLA',  'Consumer'),
+        ('HD',    'Consumer'),      ('MCD',   'Consumer'),
+        ('WMT',   'Consumer'),      ('COST',  'Consumer'),
+        ('KO',    'Consumer'),      ('PEP',   'Consumer'),
+        ('PG',    'Consumer'),      ('JPM',   'Finance'),
+        ('BAC',   'Finance'),       ('MA',    'Finance'),
+        ('V',     'Finance'),       ('BRK-B', 'Finance'),
+        ('JNJ',   'Healthcare'),    ('PFE',   'Healthcare'),
+        ('MRK',   'Healthcare'),    ('ABBV',  'Healthcare'),
+        ('ABT',   'Healthcare'),    ('TMO',   'Healthcare'),
+        ('DHR',   'Healthcare'),    ('CVX',   'Energy')
+    ) AS t(ticker, sector)
+)
+
+SELECT
+    s.filing_id,
+    s.ticker,
+    sec.sector,
+    s.filing_type,
+    s.filed_date,
+    s.period_of_report,
+    DATE_TRUNC('quarter', s.filed_date)     AS filing_quarter,
+    EXTRACT(year FROM s.filed_date)         AS filing_year,
+
+    -- NLP signals
+    ROUND(s.finbert_positive, 4)            AS finbert_positive,
+    ROUND(s.finbert_negative, 4)            AS finbert_negative,
+    s.finbert_sentiment,
+    ROUND(s.vader_compound, 4)              AS vader_compound,
+    ROUND(s.hedging_ratio, 4)               AS hedging_ratio,
+    ROUND(s.guidance_score, 4)              AS guidance_score,
+
+    -- Quarter-over-quarter deltas
+    ROUND(s.sentiment_delta, 4)             AS sentiment_delta,
+    ROUND(s.vader_delta, 4)                 AS vader_delta,
+    ROUND(s.hedging_delta, 4)               AS hedging_delta,
+
+    -- Market reaction
+    ROUND(s.pct_change_1d * 100, 3)         AS return_1d_pct,
+    ROUND(s.pct_change_5d * 100, 3)         AS return_5d_pct,
+    s.beat_market_1d,
+
+    -- Earnings Surprise Score
+    ROUND(s.surprise_score, 2)              AS surprise_score,
+    s.surprise_label,
+    s.is_anomaly,
+
+    -- Computed rankings (for leaderboard in dashboard)
+    RANK() OVER (
+        PARTITION BY s.filing_type
+        ORDER BY s.surprise_score DESC
+    )                                       AS score_rank,
+
+    RANK() OVER (
+        PARTITION BY s.ticker, s.filing_type
+        ORDER BY s.filed_date DESC
+    )                                       AS recency_rank,   -- 1 = most recent
+
+    s.computed_at
+
+FROM scores s
+LEFT JOIN sectors sec ON s.ticker = sec.ticker
+WHERE s.surprise_score IS NOT NULL
+ORDER BY s.surprise_score DESC

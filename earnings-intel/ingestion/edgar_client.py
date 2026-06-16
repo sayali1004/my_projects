@@ -237,13 +237,29 @@ def fetch_filing_text(cik: str, accession_number: str, primary_document: str) ->
         resp = _edgar_get(url)
         # Strip HTML/XML if it's an HTML filing
         if primary_document.endswith((".htm", ".html")):
-            is_xml = resp.text.lstrip().startswith("<?xml") or 'xmlns' in resp.text[:500]
-            parser = "xml" if is_xml else "lxml"
-            soup = BeautifulSoup(resp.text, parser)
-            # Remove script/style noise
+            soup = BeautifulSoup(resp.text, "lxml")
             for tag in soup(["script", "style", "header", "footer", "nav"]):
                 tag.decompose()
-            text = soup.get_text(separator="\n", strip=True)
+            # Extract from leaf divs (no nested divs) + iXBRL narrative tags
+            # This avoids duplicate text from nested div structures
+            prose_blocks = []
+            seen = set()
+            candidates = (
+                soup.find_all("div", recursive=True) +
+                soup.find_all("ix:nonnumeric") +
+                soup.find_all("p")
+            )
+            for tag in candidates:
+                if tag.name == "div" and tag.find("div"):
+                    continue  # skip parent divs, only leaf divs
+                tag_text = tag.get_text(separator=" ", strip=True)
+                if tag_text in seen:
+                    continue
+                seen.add(tag_text)
+                words = tag_text.split()
+                if 15 <= len(words) <= 300:
+                    prose_blocks.append(tag_text)
+            text = "\n".join(prose_blocks) if prose_blocks else soup.get_text(separator="\n", strip=True)
         else:
             text = resp.text
 
