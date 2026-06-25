@@ -408,6 +408,20 @@ def ingest_ticker(
                 filing.word_count, filing.fetch_duration_sec,
             )
 
+            # Publish event to Kafka/Redpanda
+            try:
+                from streaming.producer import publish_filing_ingested
+                publish_filing_ingested(
+                    filing_id=filing.id,
+                    ticker=ticker,
+                    filing_type=filing.filing_type,
+                    filed_date=filing.filed_date,
+                    minio_key=filing.minio_key,
+                    word_count=filing.word_count,
+                )
+            except Exception:
+                pass  # streaming is optional — don't fail ingestion
+
         except Exception as e:
             err_msg = f"{filing.accession_number}: {e}"
             result["errors"].append(err_msg)
